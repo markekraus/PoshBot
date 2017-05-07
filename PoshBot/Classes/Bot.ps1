@@ -128,6 +128,9 @@ class Bot {
                 # Determine if message is for bot and handle as necessary
                 $this.ProcessMessageQueue()
 
+                # Receive any completed jobs and process them
+                $this.ProcessCompletedJobs()
+
                 Start-Sleep -Milliseconds 100
 
                 # Send a ping every 5 seconds
@@ -172,14 +175,12 @@ class Bot {
     }
 
     # Receive an event from the backend chat network
-    [Message]ReceiveMessage() {
-        $msg = $this.Backend.ReceiveMessage()
+    [void]ReceiveMessage() {
         # The backend MAY return a NULL message. Ignore it
-        if ($msg) {
+        if ($msg = $this.Backend.ReceiveMessage()) {
             $this._Logger.Debug([LogMessage]::new('[Bot:ReceiveMessage] Received bot message from chat network. Adding to message queue.', $msg))
             $this.MessageQueue.Enqueue($msg)
         }
-        return $msg
     }
 
     [bool]IsBotCommand([Message]$Message) {
@@ -225,9 +226,6 @@ class Bot {
         $commandString = $Message.Text
         $parsedCommand = [CommandParser]::Parse($commandString, $Message)
         $this._Logger.Debug([LogMessage]::new('[Bot:HandleMessage] Parsed bot command', $parsedCommand))
-        $response = [Response]::new()
-        $response.MessageFrom = $Message.From
-        $response.To = $Message.To
 
         # Match parsed command to a command in the plugin manager
         $pluginCmd = $this.PluginManager.MatchCommand($parsedCommand, $cmdSearch)
@@ -255,13 +253,44 @@ class Bot {
                 }
             }
 
-            $result = $this.DispatchCommand($pluginCmd, $parsedCommand, $Message.From)
-            if (-not $result.Success) {
+            $this.Executor.ExecuteCommand($PluginCmd, $ParsedCommand, $Message)
+        } else {
+            if ($isBotCommand) {
+                $msg = "No command found matching [$commandString]"
+                $this._Logger.Info([LogMessage]::new([LogSeverity]::Warning, $msg, $parsedCommand))
+                # Only respond with command not found message if configuration allows it.
+                if (-not $this.Configuration.MuteUnknownCommand) {
+                    $response = [Response]::new()
+                    $response.MessageFrom = $Message.From
+                    $response.To = $Message.To
+                    $response.Severity = [Severity]::Warning
+                    $response.Data = New-PoshBotCardResponse -Type Warning -Text $msg
+                    $this.SendMessage($response)
+                }
+            }
+        }
+    }
 
+    [void]ProcessCompletedJobs() {
+        $completedJobs = $this.Executor.ReceiveJob()
+
+        $count = $completedJobs.Count
+        if ($count -ge 1) {
+            $this._Logger.Info([LogMessage]::new("[Bot:ProcessCompletedJobs] Processing [$count] completed jobs"))
+        }
+
+        foreach ($cmdExecContext in $completedJobs) {
+
+            $response = [Response]::new()
+            $response.MessageFrom = $cmdExecContext.Message.From
+            $response.To = $cmdExecContext.Message.To
+
+            $result = $cmdExecContext.Result
+            if (-not $result.Success) {
                 # Was the command not authorized?
                 if (-not $result.Authorized) {
                     $response.Severity = [Severity]::Warning
-                    $response.Data = New-PoshBotCardResponse -Type Warning -Text "You do not have authorization to run command [$($pluginCmd.Command.Name)] :(" -Title 'Command Unauthorized'
+                    $response.Data = New-PoshBotCardResponse -Type Warning -Text "You do not have authorization to run command [$($cmdExecContext.Command.Name)] :(" -Title 'Command Unauthorized'
                 } else {
                     # TODO
                     # Handle this better
@@ -280,42 +309,25 @@ class Bot {
                 }
             } else {
                 foreach ($r in $result.Output) {
-                    if (($r.PSObject.TypeNames[0] -eq 'PoshBot.Text.Response') -or ($r.PSObject.TypeNames[0] -eq 'PoshBot.Card.Response')) {
-                        $response.Data += $r
-                    } else {
-                        $response.Text += $($r | Format-List * | Out-String)
+                    if ($null -ne $r) {
+                        if (($r.PSObject.TypeNames[0] -eq 'PoshBot.Text.Response') -or ($r.PSObject.TypeNames[0] -eq 'PoshBot.Card.Response')) {
+                            $response.Data += $r
+                        } else {
+                            $response.Text += $($r | Format-List * | Out-String)
+                        }
                     }
                 }
-                #$response.Text = $($result.Output | Format-List * | Out-String)
             }
-        } else {
-            if ($isBotCommand) {
-                $msg = "No command found matching [$commandString]"
-                $this._Logger.Info([LogMessage]::new([LogSeverity]::Warning, $msg, $parsedCommand))
-                # Only respond with command not found message if configuration allows it.
-                if (-not $this.Configuration.MuteUnknownCommand) {
-                    $response.Severity = [Severity]::Warning
-                    $response.Data = New-PoshBotCardResponse -Type Warning -Text $msg
-                }
+
+            # Send response back to user in private (DM) channel if this command
+            # is marked to devert responses
+            if ($this.Configuration.SendCommandResponseToPrivate -contains $cmdExecContext.FullyQualifiedCommandName) {
+                $this._Logger.Info([LogMessage]::new("[Bot:HandleMessage] Deverting response from command [$($cmdExecContext.FullyQualifiedCommandName)] to private channel"))
+                $response.To = "@$($this.RoleManager.ResolveUserToId($cmdExecContext.Message.From))"
             }
+
+            $this.SendMessage($response)
         }
-
-        # Send response back to user in private (DM) channel if this command
-        # is marked to devert responses
-        if ($pluginCmd) {
-            if ($this.Configuration.SendCommandResponseToPrivate -Contains $pluginCmd.ToString()) {
-                $this._Logger.Info([LogMessage]::new("[Bot:HandleMessage] Deverting response from command [$pluginCmd.ToString()] to private channel"))
-                $Response.To = "@$($this.RoleManager.ResolveUserToId($Message.From))"
-            }
-        }
-
-        $this.SendMessage($response)
-    }
-
-    # Dispatch the command to the executor
-    [CommandResult]DispatchCommand([PluginCommand]$PluginCmd, [ParsedCommand]$ParsedCommand, [string]$CallerId) {
-        $result = $this.Executor.ExecuteCommand($PluginCmd, $ParsedCommand, $CallerId)
-        return $result
     }
 
     # Trim the command prefix or any alternate prefix or seperators off the message

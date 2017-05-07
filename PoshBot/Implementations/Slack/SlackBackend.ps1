@@ -9,7 +9,10 @@ class SlackBackend : Backend {
     [int]$MaxMessageLength = 4000
 
     # Buffer to receive data from websocket
-    hidden [Byte[]]$Buffer = (New-Object System.Byte[] 4096)
+    hidden [int]$_size = 4096
+    hidden [byte[]]$_array = [byte[]] @(, 0) * $this._size
+    #hidden [Byte[]]$_buffer = (New-Object -TypeName System.Byte[] -ArgumentList 4096)
+    hidden [System.ArraySegment[byte]]$_buffer = (New-Object System.ArraySegment[byte] -ArgumentList @(, $this._array))
 
     # Import some color defs.
     hidden [hashtable]$_PSSlackColorMap = @{
@@ -176,18 +179,28 @@ class SlackBackend : Backend {
         [Message]$msg = $null
         try {
             $ct = New-Object System.Threading.CancellationToken
-            $taskResult = $null
+            $task = $null
+            $jsonResult = [string]::empty
+
             do {
-                $taskResult = $this.Connection.WebSocket.ReceiveAsync($this.buffer, $ct)
-                while (-not $taskResult.IsCompleted) {
+                $task = ($this.Connection.WebSocket.ReceiveAsync($this._buffer, $ct))
+                while (-not $task.IsCompleted) {
                     Start-Sleep -Milliseconds 100
                 }
-            } until (
-                $taskResult.Result.Count -lt 4096
-            )
-            $jsonResult = [System.Text.Encoding]::UTF8.GetString($this.buffer, 0, $taskResult.Result.Count)
 
-            if ($null -ne $jsonResult -and $jsonResult -ne [string]::Empty) {
+                # Read in buffer
+                Write-Verbose "Received [$($task.Result.Count)] bytes"
+                $jsonResult = [System.Text.Encoding]::UTF8.GetString($this.buffer, 0, $task.Result.Count)
+                # $this._buffer.Array[0..($task.Result.Count - 1)] | ForEach {
+                #     $jsonResult += [char]$_
+                # }
+            } until (
+                $task.Result.Count -lt 4096
+            )
+
+            #$jsonResult = [System.Text.Encoding]::UTF8.GetString($this.buffer, 0, $task.Result.Count)
+
+            if (-not [string]::IsNullOrEmpty($jsonResult)) {
                 Write-Debug -Message "[SlackBackend:ReceiveMessage] Received `n$jsonResult"
 
                 # Strip out Slack's URI formatting
@@ -195,6 +208,12 @@ class SlackBackend : Backend {
 
                 $slackMessage = $jsonResult | ConvertFrom-Json
                 if ($slackMessage) {
+                    # Use the reconnect URL if sent one
+                    if ($slackMessage.type -eq 'reconnect_url') {
+                        Write-Verbose -Message "Received reconnect URL [$($slackMessage.url)]"
+                        $this.Connection.WebSocketUrl = $slackMessage.url
+                    }
+
                     # We only care about certain message types from Slack
                     if ($slackMessage.Type -in $this.MessageTypes) {
                         $msg = [Message]::new()
@@ -303,13 +322,12 @@ class SlackBackend : Backend {
         }
         $json = $msg | ConvertTo-Json
         $bytes = ([System.Text.Encoding]::UTF8).GetBytes($json)
-        Write-Debug -Message '[SlackBackend:Ping]: One ping only Vasili'
+        Write-Verbose -Message '[SlackBackend:Ping] One ping only Vasili'
         $cts = New-Object System.Threading.CancellationTokenSource -ArgumentList 5000
 
         $task = $this.Connection.WebSocket.SendAsync($bytes, [System.Net.WebSockets.WebSocketMessageType]::Text, $true, $cts.Token)
         do { Start-Sleep -Milliseconds 100 }
         until ($task.IsCompleted)
-        #$result = $this.Connection.WebSocket.SendAsync($bytes, [System.Net.WebSockets.WebSocketMessageType]::Text, $true, $cts.Token).GetAwaiter().GetResult()
     }
 
     [void]SendMessage([Response]$Response) {
