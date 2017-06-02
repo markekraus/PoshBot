@@ -1,6 +1,6 @@
 properties {
     $projectRoot = $ENV:BHProjectPath
-    if(-not $projectRoot) {
+    if (-not $projectRoot) {
         $projectRoot = $PSScriptRoot
     }
 
@@ -54,7 +54,7 @@ task Analyze -Depends Build {
 task Pester -Depends Build {
     Push-Location
     Set-Location -PassThru $outputModDir
-    if(-not $ENV:BHProjectPath) {
+    if (-not $ENV:BHProjectPath) {
         Set-BuildEnvironment -Path $PSScriptRoot\..
     }
     Remove-Module $ENV:BHProjectName -ErrorAction SilentlyContinue -Verbose:$false
@@ -100,7 +100,8 @@ task Clean -depends Init {
 
     if (Test-Path -Path $outputDir) {
         Get-ChildItem -Path $outputDir -Recurse | Remove-Item -Force -Recurse
-    } else {
+    }
+    else {
         New-Item -Path $outputDir -ItemType Directory > $null
     }
     "    Cleaned previous output directory [$outputDir]"
@@ -196,4 +197,20 @@ task Publish-Docker -depends Build-Docker {
         docker push poshbotio/poshbot-nano-slack:latest
         docker push poshbotio/poshbot-nano-slack:$version
     }
+}
+
+task ClassyPlatyPS -depends Build {
+    Start-Job -FilePath "$ProjectRoot\BuildTools\BuildDocs.ps1" -ArgumentList @(
+        "$outputModVerDir\PoshBot.psd1"
+        $ENV:BHProjectName
+        "$projectRoot\mkdocs-header.yml"
+        "$projectRoot\docs\ChangeLog.md"
+        $ProjectRoot
+        "$outputModVerDir"
+        "$projectRoot\Release.md"
+        $true
+        $true
+        $true
+    ) | Wait-Job | Receive-Job
+    "`n"
 }

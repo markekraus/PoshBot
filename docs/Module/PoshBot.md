@@ -12,47 +12,47 @@ Locale: en-US
 
 ## PoshBot Cmdlets
 ### [Get-PoshBot](Get-PoshBot.md)
-{{Manually Enter Get-PoshBot Description Here}}
+Gets any currently running instances of PoshBot that are running as background jobs.
 
 ### [Get-PoshBotConfiguration](Get-PoshBotConfiguration.md)
-{{Manually Enter Get-PoshBotConfiguration Description Here}}
+Gets a PoshBot configuration from a file.
 
 ### [Get-PoshBotStatefulData](Get-PoshBotStatefulData.md)
-{{Manually Enter Get-PoshBotStatefulData Description Here}}
+Get stateful data previously exported from a PoshBot command
 
 ### [New-PoshBotCardResponse](New-PoshBotCardResponse.md)
-{{Manually Enter New-PoshBotCardResponse Description Here}}
+Tells PoshBot to send a specially formatted response.
 
 ### [New-PoshBotConfiguration](New-PoshBotConfiguration.md)
-{{Manually Enter New-PoshBotConfiguration Description Here}}
+Creates a new PoshBot configuration object.
 
 ### [New-PoshBotFileUpload](New-PoshBotFileUpload.md)
-{{Manually Enter New-PoshBotFileUpload Description Here}}
+Tells PoshBot to upload a file to the chat network.
 
 ### [New-PoshBotInstance](New-PoshBotInstance.md)
-{{Manually Enter New-PoshBotInstance Description Here}}
+Creates a new instance of PoshBot
 
 ### [New-PoshBotScheduledTask](New-PoshBotScheduledTask.md)
-{{Manually Enter New-PoshBotScheduledTask Description Here}}
+Creates a new scheduled task to run PoshBot in the background.
 
 ### [New-PoshBotSlackBackend](New-PoshBotSlackBackend.md)
-{{Manually Enter New-PoshBotSlackBackend Description Here}}
+Create a new instance of a Slack backend
 
 ### [New-PoshBotTextResponse](New-PoshBotTextResponse.md)
-{{Manually Enter New-PoshBotTextResponse Description Here}}
+Tells PoshBot to handle the text response from a command in a special way.
 
 ### [Remove-PoshBotStatefulData](Remove-PoshBotStatefulData.md)
-{{Manually Enter Remove-PoshBotStatefulData Description Here}}
+Remove existing stateful data
 
 ### [Save-PoshBotConfiguration](Save-PoshBotConfiguration.md)
-{{Manually Enter Save-PoshBotConfiguration Description Here}}
+Saves a PoshBot configuration object to the filesystem in the form of a PowerShell data (.psd1) file.
 
 ### [Set-PoshBotStatefulData](Set-PoshBotStatefulData.md)
-{{Manually Enter Set-PoshBotStatefulData Description Here}}
+Save stateful data to use in another PoshBot command
 
 ### [Start-PoshBot](Start-PoshBot.md)
-{{Manually Enter Start-PoshBot Description Here}}
+Starts a new instance of PoshBot interactively or in a job.
 
 ### [Stop-Poshbot](Stop-Poshbot.md)
-{{Manually Enter Stop-Poshbot Description Here}}
+Stop a currently running PoshBot instance that is running as a background job.
 
